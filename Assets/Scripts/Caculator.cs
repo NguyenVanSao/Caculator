@@ -7,19 +7,72 @@ using System.Linq;
 public class Calculator : MonoBehaviour
 {
     public TextMeshProUGUI displayText;  // Gán Text component để hiển thị kết quả
+
+    private const string ERROR_MESSAGE = "Error";
+    private const string DEFAULT_DISPLAY = "0";
+    private const string OPERATORS = "+-*/";
+    
     private string input = ""; // Lưu trữ chuỗi phép tính
 
-    [SerializeField] private bool isCalDone = false;
+    private bool isCalDone = false;
 
-    // Phương thức xử lý khi nhấn các nút số
-    public void OnNumberButtonClick(string number)
+    private bool HasInput => input.Length > 0;
+
+    private void UpdateDisplay(string text)
     {
-        if(isCalDone)
+        displayText.text = text;
+    }
+
+    private void ResetInputIfCalculationDone()
+    {
+        if (isCalDone)
         {
             input = "";
             UpdateDisplay(input);
             isCalDone = false;
         }
+    }
+
+    private bool TryEvaluateExpression(out object result)
+    {
+        try
+        {
+            result = new DataTable().Compute(input, null);
+            return true;
+        }
+        catch
+        {
+            result = null;
+            UpdateDisplay(ERROR_MESSAGE);
+            return false;
+        }
+    }
+
+    private void ProcessMathOperation(System.Func<double, double> operation)
+    {
+        if (!HasInput) return;
+
+        if (TryEvaluateExpression(out object result))
+        {
+            try
+            {
+                double currentValue = double.Parse(result.ToString());
+                double newResult = operation(currentValue);
+                input = newResult.ToString();
+                UpdateDisplay(input);
+                isCalDone = true;
+            }
+            catch
+            {
+                UpdateDisplay(ERROR_MESSAGE);
+            }
+        }
+    }
+
+    // Phương thức xử lý khi nhấn các nút số
+    public void OnNumberButtonClick(string number)
+    {
+        ResetInputIfCalculationDone();
         input += number;
         UpdateDisplay(input);
     }
@@ -27,226 +80,128 @@ public class Calculator : MonoBehaviour
     // Method to handle the reciprocal button click (1/x)
     public void OnReciprocalButtonClick()
     {
-        if (input.Length > 0)
+        ProcessMathOperation(x => 
         {
-            try
-            {
-                var currentNumber = new DataTable().Compute(input, null);
-                if (double.Parse(currentNumber.ToString()) == 0)
-                {
-                    UpdateDisplay("Error");
-                }
-                else
-                {
-                    var reciprocalResult = 1 / double.Parse(currentNumber.ToString());
-                    input = reciprocalResult.ToString();
-                    UpdateDisplay(input);
-                }
-            }
-            catch
-            {
-                UpdateDisplay("Error");
-            }
-        }
-        isCalDone = true;
+            if (x == 0) throw new System.DivideByZeroException();
+            return 1 / x;
+        });
     }
 
     public void OnSquareButtonClick()
     {
-        if (input.Length > 0)
-        {
-            try
-            {
-                // Compute the square of the current expression
-                var currentNumber = new DataTable().Compute(input, null);
-                var squaredResult = Mathf.Pow(float.Parse(currentNumber.ToString()), 2);
-                input = squaredResult.ToString();
-                UpdateDisplay(input);
-            }
-            catch
-            {
-                UpdateDisplay("Error");
-            }
-        }
-        isCalDone = true;
+        ProcessMathOperation(x => Mathf.Pow(x, 2));
     }
 
     // Method to handle the square root button click (√x)
     public void OnSquareRootButtonClick()
     {
-        if (input.Length > 0)
+        ProcessMathOperation(x =>
         {
-            try
-            {
-                var currentNumber = new DataTable().Compute(input, null);
-                var sqrtResult = Mathf.Sqrt(float.Parse(currentNumber.ToString()));
-
-                if (double.Parse(currentNumber.ToString()) < 0)
-                {
-                    UpdateDisplay("Error");
-                }
-                else
-                {
-                    input = sqrtResult.ToString();
-                    UpdateDisplay(input);
-                }
-            }
-            catch
-            {
-                UpdateDisplay("Error");
-            }
-        }
-
-        isCalDone = true;
+            if (x < 0) throw new System.ArgumentException("Cannot calculate square root of negative number");
+            return Mathf.Sqrt((float)x);
+        });
     }
 
     // Method to handle the decimal button click
     public void OnDecimalButtonClick()
     {
-        if (input.Length == 0 || "+-*/".Contains(input[input.Length - 1].ToString()))
+        if (!HasInput || OPERATORS.Contains(input[^1]))
         {
-            // If there's no number or an operator is the last character, start with "0."
             input += "0.";
         }
         else
         {
-            // Only add a decimal if the current number doesn't already have one
-            int lastOperatorIndex = input.LastIndexOfAny(new char[] { '+', '-', '*', '/' });
-            string currentNumber = lastOperatorIndex != -1 ? input.Substring(lastOperatorIndex + 1) : input;
+            int lastOperatorIndex = input.LastIndexOfAny(OPERATORS.ToCharArray());
+            string currentNumber = lastOperatorIndex != -1 ? input[(lastOperatorIndex + 1)..] : input;
 
             if (!currentNumber.Contains("."))
             {
                 input += ".";
             }
         }
-
         UpdateDisplay(input);
     }
 
     // New Method to handle the +/- toggle button click
     public void OnToggleSignButtonClick()
     {
-        if (input.Length > 0)
+        if (!HasInput) return;
+
+        int lastOperatorIndex = input.LastIndexOfAny(OPERATORS.ToCharArray());
+        string currentNumber = lastOperatorIndex >= 0 ? input[(lastOperatorIndex + 1)..] : input;
+        
+        if (currentNumber.StartsWith("-"))
         {
-            int lastOperatorIndex = input.LastIndexOfAny(new char[] { '+', '-', '*', '/' });
-            string currentNumber = lastOperatorIndex != 0 ? input.Substring(lastOperatorIndex + 1) : input;
-
-            if (currentNumber.StartsWith("-"))
-            {
-                input = input.Substring(0, lastOperatorIndex) + currentNumber.Substring(1); // Remove the negative sign
-            }
-            else
-            {
-                input = input.Substring(0, lastOperatorIndex + 1) + "-" + currentNumber; // Add the negative sign
-            }
-
-            UpdateDisplay(input);
+            input = input[..(input.Length - currentNumber.Length)] + currentNumber[1..];
         }
+        else
+        {
+            input = input[..(input.Length - currentNumber.Length)] + "-" + currentNumber;
+        }
+        
+        UpdateDisplay(input);
     }
 
     // New Method to handle the percentage button click
     public void OnPercentageButtonClick()
     {
-        if (input.Length > 0)
-        {
-            try
-            {
-                var currentNumber = new DataTable().Compute(input, null);
-                var percentageResult = double.Parse(currentNumber.ToString()) / 100;
-                input = percentageResult.ToString();
-                UpdateDisplay(input);
-            }
-            catch
-            {
-                UpdateDisplay("Error");
-            }
-        }
+        ProcessMathOperation(x => x / 100);
     }
 
     public void OnDeleteLastCharacterClick()
     {
-        if (input.Length > 0)
-        {
-            input = input.Substring(0, input.Length - 1);
-            UpdateDisplay(input == "" ? "0" : input);
-        }
+        if (!HasInput) return;
+        
+        input = input[..^1];
+        UpdateDisplay(string.IsNullOrEmpty(input) ? DEFAULT_DISPLAY : input);
     }
 
     public void OnDeleteLastNumberClick()
     {
-        if (input.Length > 0)
-        {
-            // Tìm vị trí của phép toán gần nhất
-            int lastOperatorIndex = input.LastIndexOfAny(new char[] { '+', '-', '*', '/' });
-            if (lastOperatorIndex != -1)
-            {
-                // Xóa từ phép toán gần nhất cho đến hết
-                input = input.Substring(0, lastOperatorIndex + 1);
-            }
-            else
-            {
-                // Nếu không có phép toán nào, xóa toàn bộ
-                input = "";
-            }
-            UpdateDisplay(input == "" ? "0" : input);
-        }
+        if (!HasInput) return;
+
+        int lastOperatorIndex = input.LastIndexOfAny(OPERATORS.ToCharArray());
+        input = lastOperatorIndex != -1 ? input[..(lastOperatorIndex + 1)] : "";
+        UpdateDisplay(string.IsNullOrEmpty(input) ? DEFAULT_DISPLAY : input);
     }
 
     public void OnDelAllButtonClick()
     {
-        if(input.Length > 0)
-        {
-            input = "";
-
-            UpdateDisplay(input == "" ? "0" : input);
-        }
+        if (!HasInput) return;
+        
+        input = "";
+        UpdateDisplay(DEFAULT_DISPLAY);
     }
 
     // Phương thức xử lý khi nhấn các nút phép toán
     public void OnOperatorButtonClick(string operatorSign)
     {
-        if (input.Length > 0)
-        {
-            // Kiểm tra nếu ký tự cuối là phép toán, thay thế nó
-            if ("+-*/".Contains(input[input.Length - 1].ToString()))
-            {
-                input = input.Substring(0, input.Length - 1);
-            }
-            input += operatorSign;
-            UpdateDisplay(input);
-        }
+        if (!HasInput) return;
 
+        if (OPERATORS.Contains(input[^1]))
+        {
+            input = input[..^1];
+        }
+        input += operatorSign;
+        UpdateDisplay(input);
         isCalDone = false;
     }
 
     // Phương thức xử lý khi nhấn nút "="
     public void OnEqualsButtonClick()
     {
-        try
+        if (TryEvaluateExpression(out object result))
         {
-            // Dùng DataTable để tính toán chuỗi phép tính
-            var result = new DataTable().Compute(input, null);
             input = result.ToString();
             UpdateDisplay(input);
+            isCalDone = true;
         }
-        catch
-        {
-            UpdateDisplay("Error");
-        }
-
-        isCalDone = true;
     }
 
     // Phương thức xử lý khi nhấn nút "C" (clear)
     public void OnClearButtonClick()
     {
         input = "";
-        UpdateDisplay("0");
-    }
-
-    // Phương thức cập nhật hiển thị
-    private void UpdateDisplay(string text)
-    {
-        displayText.text = text;
+        UpdateDisplay(DEFAULT_DISPLAY);
     }
 }

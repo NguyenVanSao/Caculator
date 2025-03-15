@@ -8,7 +8,11 @@ public class CalButton : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+        int i;
+        for(i = 0; i < 10; i++)
+        {
+            Debug.Log(i);
+        }
         
     }
 
